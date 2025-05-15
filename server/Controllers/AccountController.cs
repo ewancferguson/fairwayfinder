@@ -46,7 +46,7 @@ namespace fairwayfinder.Controllers
     [HttpGet("tee-times")]
     public async Task<IActionResult> GetTeeTimes()
     {
-      var url = "https://foreupsoftware.com/index.php/api/booking/times?time=all&date=05-14-2025&holes=all&players=0&booking_class=6524&schedule_id=5971&schedule_ids%5B%5D=5971&specials_only=0&api_key=no_limits";
+      var url = "https://foreupsoftware.com/index.php/api/booking/times?time=all&date=05-15-2025&holes=all&players=0&booking_class=14951&schedule_id=1801&schedule_ids%5B%5D=1801&specials_only=0&api_key=no_limits";
 
       try
       {
