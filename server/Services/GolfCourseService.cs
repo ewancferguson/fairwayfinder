@@ -1,5 +1,8 @@
 
 
+
+using System.Globalization;
+
 namespace fairwayfinder.Services;
 
 
@@ -25,4 +28,14 @@ public class GolfCourseService
     if (golfCourse == null) throw new Exception("Golf Course does not exist");
     return golfCourse;
   }
+
+  // internal async Task GetTeeTimesAsync(int courseId)
+  // {
+  //   GolfCourse course = GetGolfCourseById(courseId);
+
+  //   if (course.BookingSoftware == "golfrev")
+  //   {
+
+  //   }
+  // }
 }
