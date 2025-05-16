@@ -17,4 +17,12 @@ public class GolfCourseRepository
     List<GolfCourse> golfCourses = _db.Query<GolfCourse>(sql).ToList();
     return golfCourses;
   }
+
+  internal GolfCourse GetGolfCourseById(int golfCourseId)
+  {
+    string sql = "SELECT * FROM golfCourses WHERE id = @golfCourseId";
+
+    GolfCourse golfCourse = _db.Query<GolfCourse>(sql, new { golfCourseId = golfCourseId }).SingleOrDefault();
+    return golfCourse;
+  }
 }

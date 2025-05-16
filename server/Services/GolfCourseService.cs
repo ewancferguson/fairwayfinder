@@ -1,4 +1,5 @@
 
+
 namespace fairwayfinder.Services;
 
 
@@ -16,5 +17,12 @@ public class GolfCourseService
     List<GolfCourse> golfCourses = _repository.GetGolfCourses();
 
     return golfCourses;
+  }
+
+  internal GolfCourse GetGolfCourseById(int golfCourseId)
+  {
+    GolfCourse golfCourse = _repository.GetGolfCourseById(golfCourseId);
+    if (golfCourse == null) throw new Exception("Golf Course does not exist");
+    return golfCourse;
   }
 }

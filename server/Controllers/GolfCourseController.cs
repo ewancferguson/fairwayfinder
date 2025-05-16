@@ -28,6 +28,21 @@ public class GolfCourseController : ControllerBase
 
     }
   }
+
+  [HttpGet("{golfCourseId}")]
+  public ActionResult<GolfCourse> GetGolfCourseById(int golfCourseId)
+  {
+    try
+    {
+      GolfCourse golfCourse = _golfCourseService.GetGolfCourseById(golfCourseId);
+      return Ok(golfCourse);
+    }
+    catch (Exception exception)
+    {
+      return BadRequest(exception.Message);
+
+    }
+  }
 }
 
 
