@@ -36,6 +36,8 @@ public class Startup
     services.AddHttpClient(); // 👈 Register HttpClient here
     services.AddScoped<AccountsRepository>();
     services.AddScoped<AccountService>();
+    services.AddScoped<GolfCourseService>();
+    services.AddScoped<GolfCourseRepository>();
   }
 
   private void ConfigureCors(IServiceCollection services)
