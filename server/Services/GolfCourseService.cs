@@ -1,3 +1,4 @@
+
 namespace fairwayfinder.Services;
 
 
@@ -9,4 +10,11 @@ public class GolfCourseService
   }
 
   private readonly GolfCourseRepository _repository;
+
+  internal List<GolfCourse> GetGolfCourses()
+  {
+    List<GolfCourse> golfCourses = _repository.GetGolfCourses();
+
+    return golfCourses;
+  }
 }

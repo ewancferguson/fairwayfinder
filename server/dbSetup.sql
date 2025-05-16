@@ -15,3 +15,5 @@ CREATE TABLE golfCourses (
     bookingSoftware VARCHAR(255) NOT NULL,
     fetchURL VARCHAR(1000) NOT NULL
 )
+
+Select * FROM golfCourses

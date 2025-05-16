@@ -11,6 +11,23 @@ public class GolfCourseController : ControllerBase
   }
 
   private readonly GolfCourseService _golfCourseService;
+
+
+
+  [HttpGet]
+  public ActionResult<List<GolfCourse>> GetGolfCourses()
+  {
+    try
+    {
+      List<GolfCourse> golfCourses = _golfCourseService.GetGolfCourses();
+      return Ok(golfCourses);
+    }
+    catch (Exception exception)
+    {
+      return BadRequest(exception.Message);
+
+    }
+  }
 }
 
 
