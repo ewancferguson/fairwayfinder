@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Mvc.Infrastructure;
+
 namespace fairwayfinder.Controllers;
 
 [ApiController]
@@ -44,19 +46,19 @@ public class GolfCourseController : ControllerBase
     }
   }
 
-  // [HttpGet("/golf/{courseId}/tee-times")]
-  // public async Task<IActionResult> GetTeeTimes(int courseId)
-  // {
-  //   try
-  //   {
-  //     var teeTimes = await _golfCourseService.GetTeeTimesAsync(courseId);
-  //     return Ok(teeTimes);
-  //   }
-  //   catch (Exception ex)
-  //   {
-  //     return StatusCode(500, ex.Message);
-  //   }
-  // }
+  [HttpGet("{courseId}/tee-times")]
+  public async Task<ActionResult<List<TeeTime>>> GetTeeTimes(int courseId)
+  {
+    try
+    {
+      List<TeeTime> teeTimes = await _golfCourseService.GetTeeTimesAsync(courseId);
+      return Ok(teeTimes);
+    }
+    catch (Exception ex)
+    {
+      return StatusCode(500, ex.Message);
+    }
+  }
 
 }
 
