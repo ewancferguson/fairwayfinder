@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net.Http;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using fairwayfinder.Models;
@@ -33,15 +34,55 @@ public class GolfCourseService
   public async Task<List<TeeTime>> GetTeeTimesAsync(int courseId)
   {
     var course = GetGolfCourseById(courseId);
-
     if (course == null) throw new Exception("Golf Course does not exist");
 
-    if (course.BookingSoftware == "golfrev")
+    return course.BookingSoftware switch
     {
-      return await GolfRevTeeTimes(course);
-    }
+      "golfrev" => await GolfRevTeeTimes(course),
+      "foreup" => await ForeupTeeTimes(course),
+      _ => throw new Exception("Unsupported booking software")
+    };
+  }
 
-    throw new Exception("Unsupported booking software");
+  private async Task<List<TeeTime>> ForeupTeeTimes(GolfCourse course)
+  {
+    string today = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    string url = course.FetchUrl.Replace("{DATE}", today);
+
+    try
+    {
+      var request = new HttpRequestMessage(HttpMethod.Get, url);
+      request.Headers.Add("accept", "application/json, text/javascript, */*; q=0.01");
+      request.Headers.Add("api-key", "no_limits");
+      request.Headers.Referrer = new Uri("https://foreupsoftware.com/index.php/booking/20879/5971");
+
+      var response = await _httpClient.SendAsync(request);
+      response.EnsureSuccessStatusCode();
+
+      var json = await response.Content.ReadAsStringAsync();
+      var rawTeeTimes = JsonSerializer.Deserialize<List<JsonElement>>(json);
+
+      var teeTimes = rawTeeTimes
+          .Where(t =>
+              t.TryGetProperty("time", out _) &&
+              t.TryGetProperty("course_name", out _) &&
+              t.TryGetProperty("available_spots", out _) &&
+              t.TryGetProperty("green_fee", out _))
+          .Select(t => new TeeTime
+          {
+            Time = t.GetProperty("time").GetString(),
+            CourseName = t.GetProperty("course_name").GetString(),
+            AvailableSpots = t.GetProperty("available_spots").GetInt32(),
+            GreenFee = t.GetProperty("green_fee").GetDecimal()
+          })
+          .ToList();
+
+      return teeTimes;
+    }
+    catch (Exception ex)
+    {
+      throw new Exception($"ForeUp fetch failed: {ex.Message}");
+    }
   }
 
   private async Task<List<TeeTime>> GolfRevTeeTimes(GolfCourse course)
