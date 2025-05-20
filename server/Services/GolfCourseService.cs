@@ -46,44 +46,49 @@ public class GolfCourseService
 
   private async Task<List<TeeTime>> ForeupTeeTimes(GolfCourse course)
   {
-    string today = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    await InitializeForeUpSessionAsync(course); // Make sure session/cookies are initialized
+
+    string today = DateTime.Now.ToString("MM-dd-yyyy", CultureInfo.InvariantCulture);
     string url = course.FetchUrl.Replace("{DATE}", today);
 
-    try
-    {
-      var request = new HttpRequestMessage(HttpMethod.Get, url);
-      request.Headers.Add("accept", "application/json, text/javascript, */*; q=0.01");
-      request.Headers.Add("api-key", "no_limits");
-      request.Headers.Referrer = new Uri("https://foreupsoftware.com/index.php/booking/20879/5971");
+    var request = new HttpRequestMessage(HttpMethod.Get, url);
+    request.Headers.Add("accept", "application/json, text/javascript, */*; q=0.01");
+    request.Headers.Add("accept-language", "en-US,en;q=0.9");
+    // request.Headers.Add("api-key", "no_limits"); // Try commenting out if you don't know this for sure
+    request.Headers.Add("cache-control", "no-cache");
+    request.Headers.Add("pragma", "no-cache");
+    request.Headers.Add("sec-fetch-dest", "empty");
+    request.Headers.Add("sec-fetch-mode", "cors");
+    request.Headers.Add("sec-fetch-site", "same-origin");
+    request.Headers.Add("x-fu-golfer-location", "foreup");
+    request.Headers.Add("x-requested-with", "XMLHttpRequest");
+    request.Headers.Referrer = new Uri("https://foreupsoftware.com/index.php/booking/20879/5971");
 
-      var response = await _httpClient.SendAsync(request);
-      response.EnsureSuccessStatusCode();
+    var response = await _httpClient.SendAsync(request);
+    response.EnsureSuccessStatusCode();
 
-      var json = await response.Content.ReadAsStringAsync();
-      var rawTeeTimes = JsonSerializer.Deserialize<List<JsonElement>>(json);
+    var json = await response.Content.ReadAsStringAsync();
+    var rawTeeTimes = JsonSerializer.Deserialize<List<JsonElement>>(json);
 
-      var teeTimes = rawTeeTimes
-          .Where(t =>
-              t.TryGetProperty("time", out _) &&
-              t.TryGetProperty("course_name", out _) &&
-              t.TryGetProperty("available_spots", out _) &&
-              t.TryGetProperty("green_fee", out _))
-          .Select(t => new TeeTime
-          {
-            Time = t.GetProperty("time").GetString(),
-            CourseName = t.GetProperty("course_name").GetString(),
-            AvailableSpots = t.GetProperty("available_spots").GetInt32(),
-            GreenFee = t.GetProperty("green_fee").GetDecimal()
-          })
-          .ToList();
+    var teeTimes = rawTeeTimes
+        .Where(t =>
+            t.TryGetProperty("time", out _) &&
+            t.TryGetProperty("course_name", out _) &&
+            t.TryGetProperty("available_spots", out _) &&
+            t.TryGetProperty("green_fee", out _))
+        .Select(t => new TeeTime
+        {
+          Time = t.GetProperty("time").GetString(),
+          CourseName = t.GetProperty("course_name").GetString(),
+          AvailableSpots = t.GetProperty("available_spots").GetInt32(),
+          GreenFee = t.GetProperty("green_fee").GetDecimal()
+        })
+        .ToList();
 
-      return teeTimes;
-    }
-    catch (Exception ex)
-    {
-      throw new Exception($"ForeUp fetch failed: {ex.Message}");
-    }
+    return teeTimes;
   }
+
+
 
   private async Task<List<TeeTime>> GolfRevTeeTimes(GolfCourse course)
   {
@@ -141,4 +146,22 @@ public class GolfCourseService
       throw new Exception($"GolfRev fetch failed: {ex.Message}");
     }
   }
+
+  private async Task InitializeForeUpSessionAsync(GolfCourse course)
+  {
+    var bookingPageUrl = course.BookingUrl;
+    var initialRequest = new HttpRequestMessage(HttpMethod.Get, bookingPageUrl);
+
+    // Add typical headers...
+    initialRequest.Headers.Add("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+    initialRequest.Headers.Add("accept-language", "en-US,en;q=0.9");
+    initialRequest.Headers.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+    initialRequest.Headers.Referrer = new Uri("https://foreupsoftware.com/");
+
+    var response = await _httpClient.SendAsync(initialRequest);
+    response.EnsureSuccessStatusCode();
+  }
+
+
+
 }

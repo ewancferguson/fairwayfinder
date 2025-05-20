@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Http;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -30,6 +32,13 @@ public class Startup
     services.AddSwaggerGen(c =>
     {
       c.SwaggerDoc("v1", new OpenApiInfo { Title = "fairwayfinder", Version = "v1" });
+    });
+    services.AddHttpClient<GolfCourseService>()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+      UseCookies = true,
+      CookieContainer = new CookieContainer(),
+      AllowAutoRedirect = true
     });
     services.AddSingleton<Auth0Provider>();
     services.AddScoped<IDbConnection>(x => CreateDbConnection());

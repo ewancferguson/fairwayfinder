@@ -12,5 +12,6 @@ namespace fairwayfinder.Models
     public string Location { get; set; }
     public string BookingSoftware { get; set; }
     public string FetchUrl { get; set; }
+    public string BookingUrl { get; set; }
   }
 }

@@ -17,3 +17,5 @@ CREATE TABLE golfCourses (
 )
 
 Select * FROM golfCourses
+
+ALTER TABLE golfCourses ADD BookingUrl VARCHAR(500);
