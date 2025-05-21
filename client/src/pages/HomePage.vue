@@ -1,6 +1,9 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-
+import { AppState } from '@/AppState'
+import { golfCourseService } from '@/services/GolfCourseService'
+import { Pop } from '@/utils/Pop'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import CourseCard from '@/components/CourseCard.vue'
 const slides = [
   {
     image: 'https://images.unsplash.com/photo-1535131749006-b7f58c99034b?fm=jpg&q=60&w=3000&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NHx8Z29sZnxlbnwwfHwwfHx8MA%3D%3D',
@@ -26,11 +29,29 @@ onMounted(() => {
   intervalId = setInterval(() => {
     currentIndex.value = (currentIndex.value + 1) % slides.length
   }, 10000)
+
+  getCourses()
 })
 
 onUnmounted(() => {
   clearInterval(intervalId)
 })
+
+
+async function getCourses(){
+  try {
+    await golfCourseService.getCourses()
+  }
+  catch (error){
+    Pop.error(error);
+  }
+}
+
+
+const courses = computed(() =>
+AppState.golfCourses
+)
+
 </script>
 
 <template>
@@ -70,6 +91,16 @@ onUnmounted(() => {
         </div>
       </div>
     </section>
+    <section class="featured-courses py-5 bg-light">
+  <div class="container">
+    <h2 class="text-center mb-4">Featured Courses</h2>
+    <div class="row g-4">
+      <div class="col-12 col-sm-6 col-md-4 col-lg-3" v-for="course in courses" :key="course.id">
+        <CourseCard :course="course" />
+      </div>
+    </div>
+  </div>
+</section>
   </div>
 </template>
 
