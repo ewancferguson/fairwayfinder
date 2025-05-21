@@ -20,7 +20,7 @@ watch(theme, () => {
   <nav class="navbar navbar-expand-md bg-light border-bottom border-vue">
     <div class="container gap-2">
       <RouterLink :to="{ name: 'Home' }" class="d-flex align-items-center text-success">
-        <img class="navbar-brand" alt="logo" src="C:\Users\Galactic PC\source\coding\fairwayfinder\client\src\assets\img\ChatGPT Image May 21, 2025, 10_41_50 AM.png" height="50" />
+        <img class="navbar-brand" alt="logo" src="C:\Users\Galactic PC\source\coding\fairwayfinder\client\src\assets\img\ChatGPT-Image-2025-05-21.png" height="50" />
         <b class="fs-5">Fairway Finder</b>
       </RouterLink>
       <!-- collapse button -->
