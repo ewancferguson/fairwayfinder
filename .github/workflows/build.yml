@@ -29,7 +29,7 @@ jobs:
       - name: Build and Push Docker Image 🐋
         uses: docker/build-push-action@v5
         with:
-          tags: ${{ secrets.DOCKER_USERNAME }}/${{ secrets.REPO_NAME }}:latest
+          tags: ewanferg/fairwayfinder:latest
           file: server/Dockerfile
           context: .
           push: true
