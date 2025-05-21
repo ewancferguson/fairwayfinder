@@ -1,4 +1,4 @@
-version: '3'
+version: "3"
 services:
   app:
     image: your-dockerhub-username/fairwayfinder:latest
@@ -6,4 +6,4 @@ services:
     env_file:
       - fairwayfinder-env
     ports:
-      - "7045:80"
+      - "1738:80"

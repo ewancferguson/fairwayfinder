@@ -54,7 +54,7 @@ public class GolfCourseService
     var request = new HttpRequestMessage(HttpMethod.Get, url);
     request.Headers.Add("accept", "application/json, text/javascript, */*; q=0.01");
     request.Headers.Add("accept-language", "en-US,en;q=0.9");
-    // request.Headers.Add("api-key", "no_limits"); // Try commenting out if you don't know this for sure
+    // request.Headers.Add("api-key", "no_limits"); // Uncomment if you know the API key
     request.Headers.Add("cache-control", "no-cache");
     request.Headers.Add("pragma", "no-cache");
     request.Headers.Add("sec-fetch-dest", "empty");
@@ -78,7 +78,11 @@ public class GolfCourseService
             t.TryGetProperty("green_fee", out _))
         .Select(t => new TeeTime
         {
-          Time = t.GetProperty("time").GetString(),
+          Time = DateTime.ParseExact(
+                t.GetProperty("time").GetString(),
+                "yyyy-MM-dd HH:mm",
+                CultureInfo.InvariantCulture)
+                .ToString("h:mm tt", CultureInfo.InvariantCulture),
           CourseName = t.GetProperty("course_name").GetString(),
           AvailableSpots = t.GetProperty("available_spots").GetInt32(),
           GreenFee = t.GetProperty("green_fee").GetDecimal()
@@ -87,6 +91,7 @@ public class GolfCourseService
 
     return teeTimes;
   }
+
 
 
 

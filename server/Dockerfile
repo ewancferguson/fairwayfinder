@@ -1,5 +1,5 @@
 # Use an official Node.js runtime as the base image for the client build
-FROM --platform=linux/amd64 node:22-slim AS client-builder
+FROM --platform=linux/amd64 node:20-slim AS client-builder
 
 # Set the working directory in the client builder container
 WORKDIR /app/client
@@ -38,4 +38,5 @@ RUN dotnet publish -c Release -o out
 FROM mcr.microsoft.com/dotnet/aspnet:9.0
 WORKDIR /app
 COPY --from=build-env /app/server/out .
+CMD ASPNETCORE_URLS=http://*:$PORT dotnet fairwayfinder.dll
 ENTRYPOINT ["dotnet", "fairwayfinder.dll"]

@@ -1,5 +1,11 @@
 <script setup>
+import { AppState } from '@/AppState';
 import { GolfCourse } from '@/models/GolfCourse';
+import { golfCourseService } from '@/services/GolfCourseService';
+import { computed } from 'vue';
+import CourseModal from './CourseModal.vue';
+import { Modal } from 'bootstrap';
+import { Pop } from '@/utils/Pop';
 
 
 
@@ -7,6 +13,26 @@ defineProps({
   course: {type: GolfCourse, required: true}
 })
 
+async function getCourseById(id) {
+  try {
+    await golfCourseService.getCourseById(id)
+    getTeeTimes(id)
+    Modal.getOrCreateInstance('#courseModal').show()
+  } catch (error) {
+    console.error('Error fetching course:', error)
+  }
+}
+
+
+async function getTeeTimes(courseId) {
+  try {
+    await golfCourseService.getTeeTimes(courseId)
+    
+  } catch (error) {
+    Pop.error(error);
+  }
+  
+}
 
 
 
@@ -15,7 +41,7 @@ defineProps({
 
 
 <template>
-  <div class="card shadow-sm rounded-4 overflow-hidden h-100">
+  <div v-if="course" @click="getCourseById(course.id)" class="card shadow-sm rounded-4 overflow-hidden h-100">
     <img
       :src="course.img"
       class="card-img-top"
@@ -26,6 +52,7 @@ defineProps({
       <p class="card-text text-muted">{{ course.location }}</p>
     </div>
   </div>
+  <CourseModal/>
 </template>
 
 
