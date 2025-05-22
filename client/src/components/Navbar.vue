@@ -19,8 +19,7 @@ watch(theme, () => {
   <nav class="navbar navbar-expand-md bg-light border-bottom border-vue">
     <div class="container gap-2">
       <RouterLink :to="{ name: 'Home' }" class="d-flex align-items-center text-success">
-        <img class="navbar-brand" alt="logo"
-          src="https://sdmntprwestus2.oaiusercontent.com/files/00000000-29d4-61f8-9579-f85e71a63af1/raw?se=2025-05-22T17%3A55%3A23Z&sp=r&sv=2024-08-04&sr=b&scid=39e50899-1aab-5393-ac99-d272143071c6&skoid=b64a43d9-3512-45c2-98b4-dea55d094240&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-05-22T16%3A31%3A55Z&ske=2025-05-23T16%3A31%3A55Z&sks=b&skv=2024-08-04&sig=u2acWaFKYeF8ySHuTRu7r4FgtkGFaYLfuiWMd8X/lSM%3D"
+        <img class="navbar-brand" alt="logo" src="C:\Users\ewanf\source\fairwayfinder\client\src\assets\img\golf.png"
           height="50" />
         <b class="fs-5">Fairway Finder</b>
       </RouterLink>
