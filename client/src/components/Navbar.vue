@@ -19,7 +19,8 @@ watch(theme, () => {
   <nav class="navbar navbar-expand-md bg-light border-bottom border-vue">
     <div class="container gap-2">
       <RouterLink :to="{ name: 'Home' }" class="d-flex align-items-center text-success">
-        <img class="navbar-brand" alt="logo" src="" height="50" />
+        <img class="navbar-brand" alt="logo" src="C:\Users\ewanf\source\fairwayfinder\client\src\assets\img\golf.png"
+          height="50" />
         <b class="fs-5">Fairway Finder</b>
       </RouterLink>
       <!-- collapse button -->
