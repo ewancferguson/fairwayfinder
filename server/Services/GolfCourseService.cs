@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using fairwayfinder.Models;
 using fairwayfinder.Repositories;
+using Microsoft.Playwright;
 
 namespace fairwayfinder.Services;
 
@@ -39,7 +40,7 @@ public class GolfCourseService
 
     return course.BookingSoftware switch
     {
-      "golfrev" => await GolfRevTeeTimes(course),
+      "golfrev" => await GolfRevTeeTimesWithPlaywright(course),
       "foreup" => await ForeupTeeTimes(course),
       _ => throw new Exception("Unsupported booking software")
     };
@@ -79,9 +80,9 @@ public class GolfCourseService
         .Select(t => new TeeTime
         {
           Time = DateTime.ParseExact(
-                t.GetProperty("time").GetString(),
-                "yyyy-MM-dd HH:mm",
-                CultureInfo.InvariantCulture)
+                    t.GetProperty("time").GetString(),
+                    "yyyy-MM-dd HH:mm",
+                    CultureInfo.InvariantCulture)
                 .ToString("h:mm tt", CultureInfo.InvariantCulture),
           CourseName = t.GetProperty("course_name").GetString(),
           AvailableSpots = t.GetProperty("available_spots").GetInt32(),
@@ -92,78 +93,50 @@ public class GolfCourseService
     return teeTimes;
   }
 
-  private async Task<List<TeeTime>> GolfRevTeeTimes(GolfCourse course)
+  private async Task<List<TeeTime>> GolfRevTeeTimesWithPlaywright(GolfCourse course)
   {
-    await InitializeGolfRevSessionAsync(course.BookingUrl);
-
-    string today = DateTime.Now.ToString("M/d/yyyy", CultureInfo.InvariantCulture);
-    string encodedDate = Uri.EscapeDataString(today);
-    string url = course.FetchUrl.Replace("{DATE}", encodedDate);
-
-    var teeTimes = new List<TeeTime>();
-    int attempts = 0;
-    const int maxAttempts = 3;
-
-    while (attempts < maxAttempts)
+    using var playwright = await Playwright.CreateAsync();
+    await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
     {
-      try
-      {
-        var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-        request.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-        request.Headers.Add("X-Requested-With", "XMLHttpRequest");
-        request.Headers.Add("Accept-Language", "en-US,en;q=0.9");
-        request.Headers.Referrer = new Uri("https://www.golfrev.com/go/tee_times/?r=1");
+      Headless = true,
+      Args = new[] { "--no-sandbox" } // Required on Ubuntu EC2
+    });
 
-        var response = await _httpClient.SendAsync(request);
+    var context = await browser.NewContextAsync(new BrowserNewContextOptions
+    {
+      UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    });
+    var page = await context.NewPageAsync();
 
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-          attempts++;
-          await Task.Delay(1000 * attempts); // exponential backoff
-          continue;
-        }
+    // Navigate to the booking page
+    await page.GotoAsync(course.BookingUrl);
 
-        response.EnsureSuccessStatusCode();
+    // Wait for the tee time cards to be loaded on the page
+    await page.WaitForSelectorAsync("div.card-body");
 
-        var html = await response.Content.ReadAsStringAsync();
-        var doc = new HtmlDocument();
-        doc.LoadHtml(html);
+    // Extract tee time data from the DOM
+    var teeTimes = await page.EvaluateAsync<List<TeeTime>>(@"() => {
+            return Array.from(document.querySelectorAll('div.card-body')).map(card => {
+                const time = card.querySelector('h5.card-title')?.innerText.trim();
+                const courseName = card.querySelector('p.card-text.text-secondary')?.innerText.trim();
+                const playersText = Array.from(card.querySelectorAll('p')).find(p => p.innerText.includes('players'))?.innerText.trim();
+                const priceText = card.querySelector('p.cust-card-trim')?.innerText.trim();
 
-        var cards = doc.DocumentNode.SelectNodes("//div[contains(@class, 'card-body')]");
-        if (cards == null) return teeTimes;
+                if (!time || !courseName || !playersText || !priceText) return null;
 
-        foreach (var card in cards)
-        {
-          var time = card.SelectSingleNode(".//h5[contains(@class, 'card-title')]")?.InnerText.Trim();
-          var courseName = card.SelectSingleNode(".//p[contains(@class, 'card-text text-secondary')]")?.InnerText.Trim();
-          var playersText = card.SelectSingleNode(".//p[contains(text(), 'players')]")?.InnerText.Trim();
-          var priceText = card.SelectSingleNode(".//p[contains(@class, 'cust-card-trim')]")?.InnerText.Trim();
+                const spotsMatch = playersText.match(/(\d+)/);
+                const feeMatch = priceText.match(/\$(\d+(\.\d{1,2})?)/);
 
-          if (string.IsNullOrEmpty(time) || string.IsNullOrEmpty(courseName) || string.IsNullOrEmpty(playersText) || string.IsNullOrEmpty(priceText))
-            continue;
+                if (!spotsMatch || !feeMatch) return null;
 
-          if (!int.TryParse(Regex.Match(playersText, @"(\d+)").Groups[1].Value, out var spots)) continue;
-          if (!decimal.TryParse(Regex.Match(priceText, @"\$(\d+(\.\d{1,2})?)").Groups[1].Value, out var fee)) continue;
-
-          teeTimes.Add(new TeeTime
-          {
-            Time = time,
-            CourseName = courseName,
-            AvailableSpots = spots,
-            GreenFee = fee
-          });
-        }
-
-        return teeTimes;
-      }
-      catch (Exception ex)
-      {
-        if (++attempts >= maxAttempts)
-          throw new Exception($"GolfRev fetch failed after {maxAttempts} attempts: {ex.Message}");
-        await Task.Delay(1000 * attempts); // retry delay
-      }
-    }
+                return {
+                    Time: time,
+                    CourseName: courseName,
+                    AvailableSpots: parseInt(spotsMatch[1]),
+                    GreenFee: parseFloat(feeMatch[1])
+                };
+            }).filter(t => t !== null);
+        }");
 
     return teeTimes;
   }
