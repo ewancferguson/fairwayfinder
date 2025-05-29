@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -46,7 +47,7 @@ public class GolfCourseService
 
   private async Task<List<TeeTime>> ForeupTeeTimes(GolfCourse course)
   {
-    await InitializeForeUpSessionAsync(course); // Make sure session/cookies are initialized
+    await InitializeForeUpSessionAsync(course);
 
     string today = DateTime.Now.ToString("MM-dd-yyyy", CultureInfo.InvariantCulture);
     string url = course.FetchUrl.Replace("{DATE}", today);
@@ -54,7 +55,6 @@ public class GolfCourseService
     var request = new HttpRequestMessage(HttpMethod.Get, url);
     request.Headers.Add("accept", "application/json, text/javascript, */*; q=0.01");
     request.Headers.Add("accept-language", "en-US,en;q=0.9");
-    // request.Headers.Add("api-key", "no_limits"); // Uncomment if you know the API key
     request.Headers.Add("cache-control", "no-cache");
     request.Headers.Add("pragma", "no-cache");
     request.Headers.Add("sec-fetch-dest", "empty");
@@ -92,64 +92,80 @@ public class GolfCourseService
     return teeTimes;
   }
 
-
-
-
   private async Task<List<TeeTime>> GolfRevTeeTimes(GolfCourse course)
   {
+    await InitializeGolfRevSessionAsync(course.BookingUrl);
+
     string today = DateTime.Now.ToString("M/d/yyyy", CultureInfo.InvariantCulture);
     string encodedDate = Uri.EscapeDataString(today);
-
     string url = course.FetchUrl.Replace("{DATE}", encodedDate);
 
-    try
+    var teeTimes = new List<TeeTime>();
+    int attempts = 0;
+    const int maxAttempts = 3;
+
+    while (attempts < maxAttempts)
     {
-      var request = new HttpRequestMessage(HttpMethod.Get, url);
-      request.Headers.Add("Accept", "text/html, */*; q=0.01");
-      request.Headers.Add("X-Requested-With", "XMLHttpRequest");
-      request.Headers.Add("User-Agent", "Mozilla/5.0");
-      request.Headers.Referrer = new Uri("https://www.golfrev.com/go/tee_times/?r=1");
-
-      var response = await _httpClient.SendAsync(request);
-      response.EnsureSuccessStatusCode();
-
-      var html = await response.Content.ReadAsStringAsync();
-      var doc = new HtmlDocument();
-      doc.LoadHtml(html);
-
-      var cards = doc.DocumentNode.SelectNodes("//div[contains(@class, 'card-body')]");
-      if (cards == null) return new List<TeeTime>();
-
-      var teeTimes = new List<TeeTime>();
-
-      foreach (var card in cards)
+      try
       {
-        var time = card.SelectSingleNode(".//h5[contains(@class, 'card-title')]")?.InnerText.Trim();
-        var courseName = card.SelectSingleNode(".//p[contains(@class, 'card-text text-secondary')]")?.InnerText.Trim();
-        var playersText = card.SelectSingleNode(".//p[contains(text(), 'players')]")?.InnerText.Trim();
-        var priceText = card.SelectSingleNode(".//p[contains(@class, 'cust-card-trim')]")?.InnerText.Trim();
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+        request.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+        request.Headers.Add("X-Requested-With", "XMLHttpRequest");
+        request.Headers.Add("Accept-Language", "en-US,en;q=0.9");
+        request.Headers.Referrer = new Uri("https://www.golfrev.com/go/tee_times/?r=1");
 
-        if (string.IsNullOrEmpty(time) || string.IsNullOrEmpty(courseName) || string.IsNullOrEmpty(playersText) || string.IsNullOrEmpty(priceText))
-          continue;
+        var response = await _httpClient.SendAsync(request);
 
-        if (!int.TryParse(Regex.Match(playersText, @"(\d+)").Groups[1].Value, out var spots)) continue;
-        if (!decimal.TryParse(Regex.Match(priceText, @"\$(\d+(\.\d{1,2})?)").Groups[1].Value, out var fee)) continue;
-
-        teeTimes.Add(new TeeTime
+        if (response.StatusCode == HttpStatusCode.Forbidden)
         {
-          Time = time,
-          CourseName = courseName,
-          AvailableSpots = spots,
-          GreenFee = fee
-        });
-      }
+          attempts++;
+          await Task.Delay(1000 * attempts); // exponential backoff
+          continue;
+        }
 
-      return teeTimes;
+        response.EnsureSuccessStatusCode();
+
+        var html = await response.Content.ReadAsStringAsync();
+        var doc = new HtmlDocument();
+        doc.LoadHtml(html);
+
+        var cards = doc.DocumentNode.SelectNodes("//div[contains(@class, 'card-body')]");
+        if (cards == null) return teeTimes;
+
+        foreach (var card in cards)
+        {
+          var time = card.SelectSingleNode(".//h5[contains(@class, 'card-title')]")?.InnerText.Trim();
+          var courseName = card.SelectSingleNode(".//p[contains(@class, 'card-text text-secondary')]")?.InnerText.Trim();
+          var playersText = card.SelectSingleNode(".//p[contains(text(), 'players')]")?.InnerText.Trim();
+          var priceText = card.SelectSingleNode(".//p[contains(@class, 'cust-card-trim')]")?.InnerText.Trim();
+
+          if (string.IsNullOrEmpty(time) || string.IsNullOrEmpty(courseName) || string.IsNullOrEmpty(playersText) || string.IsNullOrEmpty(priceText))
+            continue;
+
+          if (!int.TryParse(Regex.Match(playersText, @"(\d+)").Groups[1].Value, out var spots)) continue;
+          if (!decimal.TryParse(Regex.Match(priceText, @"\$(\d+(\.\d{1,2})?)").Groups[1].Value, out var fee)) continue;
+
+          teeTimes.Add(new TeeTime
+          {
+            Time = time,
+            CourseName = courseName,
+            AvailableSpots = spots,
+            GreenFee = fee
+          });
+        }
+
+        return teeTimes;
+      }
+      catch (Exception ex)
+      {
+        if (++attempts >= maxAttempts)
+          throw new Exception($"GolfRev fetch failed after {maxAttempts} attempts: {ex.Message}");
+        await Task.Delay(1000 * attempts); // retry delay
+      }
     }
-    catch (Exception ex)
-    {
-      throw new Exception($"GolfRev fetch failed: {ex.Message}");
-    }
+
+    return teeTimes;
   }
 
   private async Task InitializeForeUpSessionAsync(GolfCourse course)
@@ -157,7 +173,6 @@ public class GolfCourseService
     var bookingPageUrl = course.BookingUrl;
     var initialRequest = new HttpRequestMessage(HttpMethod.Get, bookingPageUrl);
 
-    // Add typical headers...
     initialRequest.Headers.Add("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
     initialRequest.Headers.Add("accept-language", "en-US,en;q=0.9");
     initialRequest.Headers.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
@@ -167,6 +182,15 @@ public class GolfCourseService
     response.EnsureSuccessStatusCode();
   }
 
+  private async Task InitializeGolfRevSessionAsync(string bookingUrl)
+  {
+    var initialRequest = new HttpRequestMessage(HttpMethod.Get, bookingUrl);
+    initialRequest.Headers.Add("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+    initialRequest.Headers.Add("accept-language", "en-US,en;q=0.9");
+    initialRequest.Headers.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+    initialRequest.Headers.Referrer = new Uri("https://www.golfrev.com/");
 
-
+    var response = await _httpClient.SendAsync(initialRequest);
+    response.EnsureSuccessStatusCode();
+  }
 }
