@@ -126,13 +126,21 @@ public class GolfCourseService
     string fetchUrl = course.FetchUrl.Replace("{DATE}", encodedDate);
 
     var request = new HttpRequestMessage(HttpMethod.Get, fetchUrl);
-    request.Headers.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-    request.Headers.Add("accept", "text/html");
+
+    // Add headers to mimic browser fetch
+    request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+    request.Headers.Add("Accept", "text/html, */*; q=0.01");
+    request.Headers.Add("Accept-Language", "en-US,en;q=0.9");
+    request.Headers.Add("Cache-Control", "no-cache");
+    request.Headers.Add("Pragma", "no-cache");
+    request.Headers.Add("X-Requested-With", "XMLHttpRequest");
+    request.Headers.Referrer = new Uri("https://www.golfrev.com/go/tee_times");
 
     var response = await _httpClient.SendAsync(request);
     response.EnsureSuccessStatusCode();
 
     var html = await response.Content.ReadAsStringAsync();
+
     var doc = new HtmlDocument();
     doc.LoadHtml(html);
 
@@ -170,6 +178,7 @@ public class GolfCourseService
 
     return teeTimes;
   }
+
 
   private async Task InitializeForeUpSessionAsync(GolfCourse course)
   {
