@@ -56,20 +56,6 @@ public class GolfCourseController : ControllerBase
   }
 
   // --- New endpoint: Start GolfRev scrape job, returns a jobId immediately ---
-  [HttpPost("{courseId}/golfrev/scrape")]
-  public ActionResult<string> StartGolfRevScrapeJob(int courseId)
-  {
-    try
-    {
-      var jobId = _golfCourseService.StartGolfRevScrapeJob(courseId);
-      return Ok(new { jobId });
-    }
-    catch (Exception ex)
-    {
-      return StatusCode(500, ex.Message);
-    }
-  }
-
   // --- New endpoint: Check GolfRev scrape job status by jobId ---
   [HttpGet("golfrev/scrape/{jobId}")]
   public ActionResult<object> GetGolfRevScrapeJobStatus(string jobId)
