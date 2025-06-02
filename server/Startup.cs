@@ -33,16 +33,19 @@ public class Startup
     {
       c.SwaggerDoc("v1", new OpenApiInfo { Title = "fairwayfinder", Version = "v1" });
     });
+
+    // Register HttpClient with cookie container and automatic decompression for GolfCourseService
     services.AddHttpClient<GolfCourseService>()
-    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
-    {
-      UseCookies = true,
-      CookieContainer = new CookieContainer(),
-      AllowAutoRedirect = true
-    });
+      .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+      {
+        UseCookies = true,
+        CookieContainer = new CookieContainer(),
+        AllowAutoRedirect = true,
+        AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+      });
+
     services.AddSingleton<Auth0Provider>();
-    services.AddScoped<IDbConnection>(x => CreateDbConnection());
-    services.AddHttpClient(); // 👈 Register HttpClient here
+    services.AddScoped<IDbConnection>(_ => CreateDbConnection());
     services.AddScoped<AccountsRepository>();
     services.AddScoped<AccountService>();
     services.AddScoped<GolfCourseService>();
@@ -54,15 +57,13 @@ public class Startup
     services.AddCors(options =>
     {
       options.AddPolicy("CorsDevPolicy", builder =>
-            {
-              builder
-                .AllowAnyMethod()
-                .AllowAnyHeader()
-                .AllowCredentials()
-                .WithOrigins(new string[]{
-                "http://localhost:8080", "http://localhost:8081"
-            });
-            });
+      {
+        builder
+          .AllowAnyMethod()
+          .AllowAnyHeader()
+          .AllowCredentials()
+          .WithOrigins("http://localhost:8080", "http://localhost:8081");
+      });
     });
   }
 
@@ -77,7 +78,6 @@ public class Startup
       options.Authority = $"https://{Configuration["AUTH0_DOMAIN"]}/";
       options.Audience = Configuration["AUTH0_AUDIENCE"];
     });
-
   }
 
   private IDbConnection CreateDbConnection()
@@ -85,7 +85,6 @@ public class Startup
     string connectionString = Configuration["CONNECTION_STRING"];
     return new MySqlConnection(connectionString);
   }
-
 
   // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
   public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
@@ -109,11 +108,9 @@ public class Startup
 
     app.UseAuthorization();
 
-
     app.UseEndpoints(endpoints =>
     {
       endpoints.MapControllers();
     });
   }
 }
-

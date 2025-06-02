@@ -4,7 +4,6 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Collections.Concurrent;
-using System.Text.Json.Serialization;
 using HtmlAgilityPack;
 using fairwayfinder.Models;
 using fairwayfinder.Repositories;
@@ -19,6 +18,7 @@ public class GolfCourseService
 
   private static readonly ConcurrentDictionary<string, List<TeeTime>?> ScrapeJobStore = new();
 
+  // Constructor: Accept HttpClient already configured with CookieContainer & decompression
   public GolfCourseService(GolfCourseRepository repository, HttpClient httpClient)
   {
     _repository = repository;
@@ -121,6 +121,9 @@ public class GolfCourseService
     var course = GetGolfCourseById(courseId);
     if (course == null) throw new Exception("Golf Course does not exist");
 
+    // Initialize session and cookies first
+    await InitializeGolfRevSessionAsync(course.BookingUrl);
+
     string today = DateTime.Now.ToString("M/d/yyyy", CultureInfo.InvariantCulture);
     string encodedDate = Uri.EscapeDataString(today);
     string fetchUrl = course.FetchUrl.Replace("{DATE}", encodedDate);
@@ -128,7 +131,7 @@ public class GolfCourseService
     var request = new HttpRequestMessage(HttpMethod.Get, fetchUrl);
 
     // Add headers to mimic browser fetch
-    request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+    request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
     request.Headers.Add("Accept", "text/html, */*; q=0.01");
     request.Headers.Add("Accept-Language", "en-US,en;q=0.9");
     request.Headers.Add("Cache-Control", "no-cache");
@@ -179,13 +182,12 @@ public class GolfCourseService
     return teeTimes;
   }
 
-
   private async Task InitializeForeUpSessionAsync(GolfCourse course)
   {
     var request = new HttpRequestMessage(HttpMethod.Get, course.BookingUrl);
     request.Headers.Add("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
     request.Headers.Add("accept-language", "en-US,en;q=0.9");
-    request.Headers.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+    request.Headers.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
     request.Headers.Referrer = new Uri("https://foreupsoftware.com/");
 
     var response = await _httpClient.SendAsync(request);
@@ -197,7 +199,7 @@ public class GolfCourseService
     var request = new HttpRequestMessage(HttpMethod.Get, bookingUrl);
     request.Headers.Add("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
     request.Headers.Add("accept-language", "en-US,en;q=0.9");
-    request.Headers.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+    request.Headers.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
     request.Headers.Referrer = new Uri("https://www.golfrev.com/");
 
     var response = await _httpClient.SendAsync(request);
