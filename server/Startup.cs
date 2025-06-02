@@ -29,6 +29,7 @@ public class Startup
     ConfigureCors(services);
     ConfigureAuth(services);
     services.AddControllers();
+    services.AddMemoryCache();
     services.AddSwaggerGen(c =>
     {
       c.SwaggerDoc("v1", new OpenApiInfo { Title = "fairwayfinder", Version = "v1" });
