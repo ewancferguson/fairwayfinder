@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -21,10 +22,10 @@ namespace fairwayfinder.Services
 
     private static readonly string[] UserAgents =
     {
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.1 Safari/605.1.15",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:108.0) Gecko/20100101 Firefox/108.0"
-        };
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.1 Safari/605.1.15",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:108.0) Gecko/20100101 Firefox/108.0"
+    };
 
     private static readonly ConcurrentDictionary<string, List<TeeTime>?> ScrapeJobs = new();
 
@@ -83,11 +84,20 @@ namespace fairwayfinder.Services
     private HttpRequestMessage CreateRequest(string url, string referer)
     {
       var request = new HttpRequestMessage(HttpMethod.Get, url);
-      request.Headers.Add("User-Agent", UserAgents[_rand.Next(UserAgents.Length)]);
+      var userAgent = UserAgents[_rand.Next(UserAgents.Length)];
+
+      request.Headers.Add("User-Agent", userAgent);
+      request.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8");
       request.Headers.Add("Accept-Language", "en-US,en;q=0.9");
       request.Headers.Add("Cache-Control", "no-cache");
       request.Headers.Add("Pragma", "no-cache");
+      request.Headers.Add("Upgrade-Insecure-Requests", "1");
+      request.Headers.Add("Sec-Fetch-Dest", "document");
+      request.Headers.Add("Sec-Fetch-Mode", "navigate");
+      request.Headers.Add("Sec-Fetch-Site", "same-origin");
+      request.Headers.Add("Sec-Fetch-User", "?1");
       request.Headers.Referrer = new Uri(referer);
+
       return request;
     }
 
@@ -97,7 +107,12 @@ namespace fairwayfinder.Services
       var date = Uri.EscapeDataString(DateTime.Now.ToString("M/d/yyyy", CultureInfo.InvariantCulture));
       var url = course.FetchUrl.Replace("{DATE}", date);
 
-      var response = await _httpClient.SendAsync(CreateRequest(url, "https://www.golfrev.com/go/tee_times"));
+      var request = CreateRequest(url, "https://www.golfrev.com/go/tee_times");
+      var response = await _httpClient.SendAsync(request);
+
+      Console.WriteLine($"GolfRev Request URL: {url}");
+      Console.WriteLine($"Status Code: {response.StatusCode}");
+
       response.EnsureSuccessStatusCode();
 
       var html = await response.Content.ReadAsStringAsync();
@@ -134,10 +149,9 @@ namespace fairwayfinder.Services
       return teeTimes;
     }
 
-    // ✅ Your original ForeUp scraping logic, unchanged
     private async Task<List<TeeTime>> ForeupTeeTimes(GolfCourse course)
     {
-      await InitializeForeUpSessionAsync(course); // Make sure session/cookies are initialized
+      await InitializeForeUpSessionAsync(course);
 
       string today = DateTime.Now.ToString("MM-dd-yyyy", CultureInfo.InvariantCulture);
       string url = course.FetchUrl.Replace("{DATE}", today);
@@ -145,7 +159,6 @@ namespace fairwayfinder.Services
       var request = new HttpRequestMessage(HttpMethod.Get, url);
       request.Headers.Add("accept", "application/json, text/javascript, */*; q=0.01");
       request.Headers.Add("accept-language", "en-US,en;q=0.9");
-      // request.Headers.Add("api-key", "no_limits"); // Uncomment if you know the API key
       request.Headers.Add("cache-control", "no-cache");
       request.Headers.Add("pragma", "no-cache");
       request.Headers.Add("sec-fetch-dest", "empty");
@@ -188,7 +201,6 @@ namespace fairwayfinder.Services
       var bookingPageUrl = course.BookingUrl;
       var initialRequest = new HttpRequestMessage(HttpMethod.Get, bookingPageUrl);
 
-      // Add typical headers...
       initialRequest.Headers.Add("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
       initialRequest.Headers.Add("accept-language", "en-US,en;q=0.9");
       initialRequest.Headers.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
@@ -197,6 +209,5 @@ namespace fairwayfinder.Services
       var response = await _httpClient.SendAsync(initialRequest);
       response.EnsureSuccessStatusCode();
     }
-
   }
 }
