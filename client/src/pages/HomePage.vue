@@ -38,18 +38,18 @@ onUnmounted(() => {
 })
 
 
-async function getCourses(){
+async function getCourses() {
   try {
     await golfCourseService.getCourses()
   }
-  catch (error){
+  catch (error) {
     Pop.error(error);
   }
 }
 
 
 const courses = computed(() =>
-AppState.golfCourses
+  AppState.golfCourses
 )
 
 </script>
@@ -58,11 +58,8 @@ AppState.golfCourses
   <div class="container-fluid p-0">
     <div class="hero-section">
       <transition name="fade" mode="out-in">
-        <div
-          :key="currentIndex"
-          class="hero-slide"
-          :style="{ backgroundImage: `url('${slides[currentIndex].image}')` }"
-        >
+        <div :key="currentIndex" class="hero-slide"
+          :style="{ backgroundImage: `url('${slides[currentIndex].image}')` }">
           <div class="hero-text">
             <h1>{{ slides[currentIndex].heading }}</h1>
             <p>{{ slides[currentIndex].text }}</p>
@@ -73,34 +70,35 @@ AppState.golfCourses
 
     <section class="how-it-works text-center py-5">
       <h2 class="section-title">How It Works</h2>
-      <div class="steps d-flex justify-content-center gap-4 flex-wrap mt-4">
-        <div class="step px-3">
+      <div class="steps d-flex flex-column flex-md-row justify-content-center align-items-center gap-4 mt-4">
+        <div class="step px-3 text-center">
           <div class="icon">🔍</div>
           <h3>Search Courses</h3>
           <p>Enter your location or favorite course to find available tee times.</p>
         </div>
-        <div class="step px-3">
+        <div class="step px-3 text-center">
           <div class="icon">📊</div>
           <h3>Compare Options</h3>
           <p>View real-time tee times across multiple courses side-by-side.</p>
         </div>
-        <div class="step px-3">
+        <div class="step px-3 text-center">
           <div class="icon">⛳️</div>
           <h3>Plan Your Round</h3>
           <p>Choose your preferred time and get ready to hit the fairway. Booking coming soon!</p>
         </div>
       </div>
     </section>
+
     <section class="featured-courses py-5 bg-light">
-  <div class="container">
-    <h2 class="text-center mb-4">Featured Courses</h2>
-    <div class="row g-4">
-      <div class="col-12 col-sm-6 col-md-4 col-lg-3" v-for="course in courses" :key="course.id">
-        <CourseCard :course="course" />
+      <div class="container">
+        <h2 class="text-center mb-4">Featured Courses</h2>
+        <div class="row g-4">
+          <div class="col-12 col-sm-6 col-md-4 col-lg-3" v-for="course in courses" :key="course.id">
+            <CourseCard :course="course" />
+          </div>
+        </div>
       </div>
-    </div>
-  </div>
-</section>
+    </section>
   </div>
 </template>
 
@@ -141,6 +139,7 @@ AppState.golfCourses
 .fade-leave-active {
   transition: opacity 1s ease;
 }
+
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
@@ -167,7 +166,7 @@ AppState.golfCourses
   max-width: 250px;
   background: white;
   border-radius: 8px;
-  box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
   padding: 1.5rem 1rem;
 }
 

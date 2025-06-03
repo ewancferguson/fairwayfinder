@@ -1,172 +1,202 @@
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using HtmlAgilityPack;
 using fairwayfinder.Models;
 using fairwayfinder.Repositories;
 
-namespace fairwayfinder.Services;
-
-public class GolfCourseService
+namespace fairwayfinder.Services
 {
-  private readonly GolfCourseRepository _repository;
-  private readonly HttpClient _httpClient;
-
-  public GolfCourseService(GolfCourseRepository repository, HttpClient httpClient)
+  public class GolfCourseService
   {
-    _repository = repository;
-    _httpClient = httpClient;
-  }
+    private readonly GolfCourseRepository _repository;
+    private readonly HttpClient _httpClient;
+    private static readonly Random _rand = new();
 
-  public List<GolfCourse> GetGolfCourses()
-  {
-    return _repository.GetGolfCourses();
-  }
-
-  public GolfCourse GetGolfCourseById(int golfCourseId)
-  {
-    var golfCourse = _repository.GetGolfCourseById(golfCourseId);
-    if (golfCourse == null) throw new Exception("Golf Course does not exist");
-    return golfCourse;
-  }
-
-  public async Task<List<TeeTime>> GetTeeTimesAsync(int courseId)
-  {
-    var course = GetGolfCourseById(courseId);
-    if (course == null) throw new Exception("Golf Course does not exist");
-
-    return course.BookingSoftware switch
+    private static readonly string[] UserAgents =
     {
-      "golfrev" => await GolfRevTeeTimes(course),
-      "foreup" => await ForeupTeeTimes(course),
-      _ => throw new Exception("Unsupported booking software")
-    };
-  }
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.1 Safari/605.1.15",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:108.0) Gecko/20100101 Firefox/108.0"
+        };
 
-  private async Task<List<TeeTime>> ForeupTeeTimes(GolfCourse course)
-  {
-    await InitializeForeUpSessionAsync(course); // Make sure session/cookies are initialized
+    private static readonly ConcurrentDictionary<string, List<TeeTime>?> ScrapeJobs = new();
 
-    string today = DateTime.Now.ToString("MM-dd-yyyy", CultureInfo.InvariantCulture);
-    string url = course.FetchUrl.Replace("{DATE}", today);
+    public GolfCourseService(GolfCourseRepository repository, IHttpClientFactory httpClientFactory)
+    {
+      _repository = repository;
+      _httpClient = httpClientFactory.CreateClient();
+    }
 
-    var request = new HttpRequestMessage(HttpMethod.Get, url);
-    request.Headers.Add("accept", "application/json, text/javascript, */*; q=0.01");
-    request.Headers.Add("accept-language", "en-US,en;q=0.9");
-    // request.Headers.Add("api-key", "no_limits"); // Uncomment if you know the API key
-    request.Headers.Add("cache-control", "no-cache");
-    request.Headers.Add("pragma", "no-cache");
-    request.Headers.Add("sec-fetch-dest", "empty");
-    request.Headers.Add("sec-fetch-mode", "cors");
-    request.Headers.Add("sec-fetch-site", "same-origin");
-    request.Headers.Add("x-fu-golfer-location", "foreup");
-    request.Headers.Add("x-requested-with", "XMLHttpRequest");
-    request.Headers.Referrer = new Uri("https://foreupsoftware.com/index.php/booking/20879/5971");
+    public List<GolfCourse> GetGolfCourses() => _repository.GetGolfCourses();
 
-    var response = await _httpClient.SendAsync(request);
-    response.EnsureSuccessStatusCode();
+    public GolfCourse GetGolfCourseById(int id) =>
+        _repository.GetGolfCourseById(id) ?? throw new Exception("Golf course not found.");
 
-    var json = await response.Content.ReadAsStringAsync();
-    var rawTeeTimes = JsonSerializer.Deserialize<List<JsonElement>>(json);
+    public async Task<List<TeeTime>> GetTeeTimesAsync(int courseId)
+    {
+      var course = GetGolfCourseById(courseId);
 
-    var teeTimes = rawTeeTimes
-        .Where(t =>
-            t.TryGetProperty("time", out _) &&
-            t.TryGetProperty("course_name", out _) &&
-            t.TryGetProperty("available_spots", out _) &&
-            t.TryGetProperty("green_fee", out _))
-        .Select(t => new TeeTime
+      return course.BookingSoftware switch
+      {
+        "golfrev" => await GetGolfRevTeeTimesAsync(course),
+        "foreup" => await ForeupTeeTimes(course),
+        _ => throw new Exception("Unsupported booking software")
+      };
+    }
+
+    public string StartScrapeJob(int courseId)
+    {
+      var jobId = Guid.NewGuid().ToString();
+      ScrapeJobs[jobId] = null;
+
+      _ = Task.Run(async () =>
+      {
+        try
         {
-          Time = DateTime.ParseExact(
-                t.GetProperty("time").GetString(),
-                "yyyy-MM-dd HH:mm",
-                CultureInfo.InvariantCulture)
-                .ToString("h:mm tt", CultureInfo.InvariantCulture),
-          CourseName = t.GetProperty("course_name").GetString(),
-          AvailableSpots = t.GetProperty("available_spots").GetInt32(),
-          GreenFee = t.GetProperty("green_fee").GetDecimal()
-        })
-        .ToList();
+          var results = await GetTeeTimesAsync(courseId);
+          ScrapeJobs[jobId] = results;
+        }
+        catch
+        {
+          ScrapeJobs.TryRemove(jobId, out _);
+        }
+      });
 
-    return teeTimes;
-  }
+      return jobId;
+    }
 
+    public (bool Found, bool IsComplete, List<TeeTime>? Results) GetScrapeJobStatus(string jobId)
+    {
+      if (!ScrapeJobs.TryGetValue(jobId, out var results))
+        return (false, false, null);
 
+      return (true, results != null, results);
+    }
 
-
-  private async Task<List<TeeTime>> GolfRevTeeTimes(GolfCourse course)
-  {
-    string today = DateTime.Now.ToString("M/d/yyyy", CultureInfo.InvariantCulture);
-    string encodedDate = Uri.EscapeDataString(today);
-
-    string url = course.FetchUrl.Replace("{DATE}", encodedDate);
-
-    try
+    private HttpRequestMessage CreateRequest(string url, string referer)
     {
       var request = new HttpRequestMessage(HttpMethod.Get, url);
-      request.Headers.Add("Accept", "text/html, */*; q=0.01");
-      request.Headers.Add("X-Requested-With", "XMLHttpRequest");
-      request.Headers.Add("User-Agent", "Mozilla/5.0");
-      request.Headers.Referrer = new Uri("https://www.golfrev.com/go/tee_times/?r=1");
+      request.Headers.Add("User-Agent", UserAgents[_rand.Next(UserAgents.Length)]);
+      request.Headers.Add("Accept-Language", "en-US,en;q=0.9");
+      request.Headers.Add("Cache-Control", "no-cache");
+      request.Headers.Add("Pragma", "no-cache");
+      request.Headers.Referrer = new Uri(referer);
+      return request;
+    }
 
-      var response = await _httpClient.SendAsync(request);
+    private async Task<List<TeeTime>> GetGolfRevTeeTimesAsync(GolfCourse course)
+    {
+      await Task.Delay(_rand.Next(200, 500));
+      var date = Uri.EscapeDataString(DateTime.Now.ToString("M/d/yyyy", CultureInfo.InvariantCulture));
+      var url = course.FetchUrl.Replace("{DATE}", date);
+
+      var response = await _httpClient.SendAsync(CreateRequest(url, "https://www.golfrev.com/go/tee_times"));
       response.EnsureSuccessStatusCode();
 
       var html = await response.Content.ReadAsStringAsync();
       var doc = new HtmlDocument();
       doc.LoadHtml(html);
 
-      var cards = doc.DocumentNode.SelectNodes("//div[contains(@class, 'card-body')]");
-      if (cards == null) return new List<TeeTime>();
-
       var teeTimes = new List<TeeTime>();
+      var cards = doc.DocumentNode.SelectNodes("//div[contains(@class, 'card-body')]");
+      if (cards == null) return teeTimes;
 
       foreach (var card in cards)
       {
-        var time = card.SelectSingleNode(".//h5[contains(@class, 'card-title')]")?.InnerText.Trim();
-        var courseName = card.SelectSingleNode(".//p[contains(@class, 'card-text text-secondary')]")?.InnerText.Trim();
-        var playersText = card.SelectSingleNode(".//p[contains(text(), 'players')]")?.InnerText.Trim();
-        var priceText = card.SelectSingleNode(".//p[contains(@class, 'cust-card-trim')]")?.InnerText.Trim();
-
-        if (string.IsNullOrEmpty(time) || string.IsNullOrEmpty(courseName) || string.IsNullOrEmpty(playersText) || string.IsNullOrEmpty(priceText))
-          continue;
-
-        if (!int.TryParse(Regex.Match(playersText, @"(\d+)").Groups[1].Value, out var spots)) continue;
-        if (!decimal.TryParse(Regex.Match(priceText, @"\$(\d+(\.\d{1,2})?)").Groups[1].Value, out var fee)) continue;
-
-        teeTimes.Add(new TeeTime
+        try
         {
-          Time = time,
-          CourseName = courseName,
-          AvailableSpots = spots,
-          GreenFee = fee
-        });
+          var time = card.SelectSingleNode(".//h5[contains(@class, 'card-title')]")?.InnerText.Trim();
+          var courseName = card.SelectSingleNode(".//p[contains(@class, 'text-secondary')]")?.InnerText.Trim();
+          var players = Regex.Match(card.InnerText, @"(\d+) players").Groups[1].Value;
+          var fee = Regex.Match(card.InnerText, @"\$(\d+(\.\d{1,2})?)").Groups[1].Value;
+
+          if (int.TryParse(players, out var spots) && decimal.TryParse(fee, out var greenFee))
+          {
+            teeTimes.Add(new TeeTime
+            {
+              Time = time,
+              CourseName = courseName,
+              AvailableSpots = spots,
+              GreenFee = greenFee
+            });
+          }
+        }
+        catch { continue; }
       }
 
       return teeTimes;
     }
-    catch (Exception ex)
+
+    // ✅ Your original ForeUp scraping logic, unchanged
+    private async Task<List<TeeTime>> ForeupTeeTimes(GolfCourse course)
     {
-      throw new Exception($"GolfRev fetch failed: {ex.Message}");
+      await InitializeForeUpSessionAsync(course); // Make sure session/cookies are initialized
+
+      string today = DateTime.Now.ToString("MM-dd-yyyy", CultureInfo.InvariantCulture);
+      string url = course.FetchUrl.Replace("{DATE}", today);
+
+      var request = new HttpRequestMessage(HttpMethod.Get, url);
+      request.Headers.Add("accept", "application/json, text/javascript, */*; q=0.01");
+      request.Headers.Add("accept-language", "en-US,en;q=0.9");
+      // request.Headers.Add("api-key", "no_limits"); // Uncomment if you know the API key
+      request.Headers.Add("cache-control", "no-cache");
+      request.Headers.Add("pragma", "no-cache");
+      request.Headers.Add("sec-fetch-dest", "empty");
+      request.Headers.Add("sec-fetch-mode", "cors");
+      request.Headers.Add("sec-fetch-site", "same-origin");
+      request.Headers.Add("x-fu-golfer-location", "foreup");
+      request.Headers.Add("x-requested-with", "XMLHttpRequest");
+      request.Headers.Referrer = new Uri("https://foreupsoftware.com/index.php/booking/20879/5971");
+
+      var response = await _httpClient.SendAsync(request);
+      response.EnsureSuccessStatusCode();
+
+      var json = await response.Content.ReadAsStringAsync();
+      var rawTeeTimes = JsonSerializer.Deserialize<List<JsonElement>>(json);
+
+      var teeTimes = rawTeeTimes
+          .Where(t =>
+              t.TryGetProperty("time", out _) &&
+              t.TryGetProperty("course_name", out _) &&
+              t.TryGetProperty("available_spots", out _) &&
+              t.TryGetProperty("green_fee", out _))
+          .Select(t => new TeeTime
+          {
+            Time = DateTime.ParseExact(
+                  t.GetProperty("time").GetString(),
+                  "yyyy-MM-dd HH:mm",
+                  CultureInfo.InvariantCulture)
+                  .ToString("h:mm tt", CultureInfo.InvariantCulture),
+            CourseName = t.GetProperty("course_name").GetString(),
+            AvailableSpots = t.GetProperty("available_spots").GetInt32(),
+            GreenFee = t.GetProperty("green_fee").GetDecimal()
+          })
+          .ToList();
+
+      return teeTimes;
     }
+
+    private async Task InitializeForeUpSessionAsync(GolfCourse course)
+    {
+      var bookingPageUrl = course.BookingUrl;
+      var initialRequest = new HttpRequestMessage(HttpMethod.Get, bookingPageUrl);
+
+      // Add typical headers...
+      initialRequest.Headers.Add("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+      initialRequest.Headers.Add("accept-language", "en-US,en;q=0.9");
+      initialRequest.Headers.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+      initialRequest.Headers.Referrer = new Uri("https://foreupsoftware.com/");
+
+      var response = await _httpClient.SendAsync(initialRequest);
+      response.EnsureSuccessStatusCode();
+    }
+
   }
-
-  private async Task InitializeForeUpSessionAsync(GolfCourse course)
-  {
-    var bookingPageUrl = course.BookingUrl;
-    var initialRequest = new HttpRequestMessage(HttpMethod.Get, bookingPageUrl);
-
-    // Add typical headers...
-    initialRequest.Headers.Add("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-    initialRequest.Headers.Add("accept-language", "en-US,en;q=0.9");
-    initialRequest.Headers.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-    initialRequest.Headers.Referrer = new Uri("https://foreupsoftware.com/");
-
-    var response = await _httpClient.SendAsync(initialRequest);
-    response.EnsureSuccessStatusCode();
-  }
-
-
-
 }
